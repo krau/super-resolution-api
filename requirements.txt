@@ -1,3 +1,4 @@
 onnxruntime-directml
 opencv-python
 numpy
+fastapi
