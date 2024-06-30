@@ -30,6 +30,7 @@ def process_image(
     input_image: Path = None,
     output_path: Path | str = "output",
     gpuid: int = 0,
+    clean: bool = True,
 ) -> Path:
     logger.info(f"input_image: {input_image}")
     global model
@@ -102,3 +103,7 @@ def process_image(
         sr_instance = None
         logger.error(f"error: {e}")
         return None
+    finally:
+        if clean and input_image.exists():
+            logger.debug(f"clean {input_image}")
+            input_image.unlink()
