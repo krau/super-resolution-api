@@ -15,7 +15,7 @@ async def root():
 
 @app.post("/sr")
 async def super_resolution(file: UploadFile = File(...)):
-    with tempfile.NamedTemporaryFile() as temp:
+    with tempfile.NamedTemporaryFile(dir="./temp") as temp:
         temp.write(file.file.read())
         temp_path = pathlib.Path(temp.name)
         output_path = process_image(input_image=temp_path)
@@ -23,6 +23,8 @@ async def super_resolution(file: UploadFile = File(...)):
 
 
 if __name__ == "__main__":
+    if not pathlib.Path("temp").exists():
+        pathlib.Path("temp").mkdir()
     import uvicorn
 
     try:

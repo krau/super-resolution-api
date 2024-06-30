@@ -14,7 +14,7 @@ class OnnxSRInfer:
         scale,
         name,
         alpha_upsampler="sr model",
-        providers=["DmlExecutionProvider"],
+        providers=["CUDAExecutionProvider"],
         provider_options=None,
     ):
         """Onnx SR Infer
