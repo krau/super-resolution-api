@@ -1,4 +1,6 @@
+import datetime
 import math
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -6,6 +8,8 @@ import cv2
 import numpy as np
 from loguru import logger
 
+from common import redis_client
+from config import settings
 from onnx_infer import OnnxSRInfer
 
 
@@ -22,7 +26,8 @@ model = ModelInfo(
 )
 
 
-def process_image(
+def _process_image(
+    model: ModelInfo = model,
     tile_size: int = 64,  # 分块大小
     scale: int = 4,  # 放大倍数
     skip_alpha: bool = False,  # 是否跳过alpha通道
@@ -32,23 +37,21 @@ def process_image(
     gpuid: int = 0,
     clean: bool = True,
 ) -> Path:
-    logger.info(f"input_image: {input_image}")
-    global model
+    logger.info(f"process image: {input_image}")
     try:
         provider_options = None
         if int(gpuid) >= 0:
             provider_options = [{"device_id": int(gpuid)}]
-
         sr_instance = OnnxSRInfer(
             model.path,
             model.scale,
             model.name,
+            providers=settings.get("providers", ["CUDAExecutionProvider"]),
             provider_options=provider_options,
         )
         if skip_alpha:
             logger.debug("Skip Alpha Channel")
             sr_instance.alpha_upsampler = "interpolation"
-
         img = cv2.imdecode(
             np.fromfile(input_image, dtype=np.uint8), cv2.IMREAD_UNCHANGED
         )
@@ -96,14 +99,69 @@ def process_image(
         final_output_path = Path(output_path) / f"{input_image.stem}_{model.name}.png"
         if not Path(output_path).exists():
             Path(output_path).mkdir(parents=True)
-        logger.info(f"save to {final_output_path}")
+        logger.debug(f"save to {final_output_path}")
         cv2.imencode(".png", img_out)[1].tofile(final_output_path)
         return final_output_path
     except Exception as e:
-        sr_instance = None
-        logger.error(f"error: {e}")
+        logger.error(f"process image error: {e}")
         return None
     finally:
+        sr_instance = None
         if clean and input_image.exists():
             logger.debug(f"clean {input_image}")
             input_image.unlink()
+
+
+def listen_queue(stream_name: str = "real_esrgan_api_queue"):
+    logger.info(f"Listening to stream: {stream_name}")
+    last_id = "0"
+    while True:
+        messages = redis_client.xread({stream_name: last_id}, count=1, block=0)
+        if not messages:
+            continue
+        message_id = messages[0][1][0][0]
+        last_id = message_id
+        message = messages[0][1][0][1]
+        logger.info(f"Received message: {message_id}")
+        data: dict[str, Path | int | bool | str | None] = pickle.loads(message[b"data"])
+        input_image = data.get("input_image")
+        tile_size = data.get("tile_size", 64)
+        scale = data.get("scale", 4)
+        skip_alpha = data.get("skip_alpha", False)
+        resize_to = data.get("resize_to", None)
+        redis_client.set(
+            f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+            pickle.dumps({"status": "processing"}),
+            ex=86400,
+        )
+        processed_image_path = _process_image(
+            input_image=input_image,
+            tile_size=tile_size,
+            scale=scale,
+            skip_alpha=skip_alpha,
+            resize_to=resize_to,
+        )
+        if not processed_image_path:
+            logger.error("Failed to process image")
+            redis_client.set(
+                f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+                pickle.dumps({"status": "failed"}),
+                ex=86400,
+            )
+            continue
+        redis_client.set(
+            f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+            pickle.dumps(
+                {
+                    "status": "success",
+                    "path": processed_image_path.as_posix(),
+                    "size": processed_image_path.stat().st_size,
+                }
+            ),
+            ex=86400,
+        )
+        logger.success(f"Processed image: {processed_image_path}")
+
+        for file in Path("output").iterdir():
+            if datetime.datetime.now().timestamp() - file.stat().st_mtime > 86400:
+                file.unlink()

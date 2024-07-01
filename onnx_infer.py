@@ -7,7 +7,6 @@ from loguru import logger
 
 
 class OnnxSRInfer:
-
     def __init__(
         self,
         model_path,
@@ -169,7 +168,7 @@ class OnnxSRInfer:
         return final_img
 
     def universal_process_pipeline(self, image, tile_size):
-        logger.info(f"Processing image with {self.name}...")
+        logger.debug(f"Processing image with {self.name}...")
         img_mode = "RGB"
         h, w, c = image.shape
         # handle RGBA image

@@ -1,5 +1,9 @@
-opencv-python
-numpy
-fastapi
-loguru
-onnxruntime-gpu
+dynaconf==3.2.5
+fastapi==0.111.0
+httpx==0.27.0
+loguru==0.7.2
+numpy==2.0.0
+onnxruntime_gpu==1.18.1
+opencv_python==4.10.0.84
+redis==5.0.7
+uvicorn==0.30.1

@@ -3,3 +3,4 @@ output/
 __pycache__/
 # Ignore dynaconf secret files
 .secrets.*
+temp/
