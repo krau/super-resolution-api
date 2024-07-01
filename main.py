@@ -30,7 +30,11 @@ async def verify_token(x_token: str = Header()):
         )
 
 
-app = FastAPI(dependencies=[Depends(verify_token)])
+app = FastAPI(
+    dependencies=[Depends(verify_token)],
+    title="Real ESRGAN API",
+    description="Restful API for Real ESRGAN",
+)
 
 
 app.add_middleware(
