@@ -66,6 +66,13 @@ async def super_resolution(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No file or url provided"
         )
 
+    xlength = redis_client.xlen("real_esrgan_api_queue")
+    if xlength > 10:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests, please try again later",
+        )
+
     temp = tempfile.NamedTemporaryFile(dir="./temp", delete=False)
     temp_path = pathlib.Path(temp.name)
     try:
@@ -107,12 +114,14 @@ async def super_resolution(
             ),
         },
     )
+    xlength = redis_client.xlen("real_esrgan_api_queue")
+    if xlength > 1:
+        redis_client.set(
+            f"real_esrgan_api_result_{resp.decode('utf-8')}",
+            pickle.dumps({"status": "pending"}),
+            ex=86400,
+        )
     logger.info(f"Task added to queue: {resp.decode('utf-8')}")
-    redis_client.set(
-        f"real_esrgan_api_result_{resp.decode('utf-8')}",
-        pickle.dumps({"status": "pending"}),
-        ex=86400,
-    )
     return {"message": "Success", "task_id": f"{resp.decode('utf-8')}"}
 
 

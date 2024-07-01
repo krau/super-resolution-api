@@ -142,6 +142,7 @@ def listen_queue(stream_name: str = "real_esrgan_api_queue"):
             skip_alpha=skip_alpha,
             resize_to=resize_to,
         )
+        redis_client.xdel(stream_name, message_id)
         if not processed_image_path:
             logger.error("Failed to process image")
             redis_client.set(
