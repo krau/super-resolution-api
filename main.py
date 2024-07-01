@@ -163,8 +163,9 @@ if __name__ == "__main__":
             host=settings.get("host", "0.0.0.0"),
             port=settings.get("port", 39721),
         )
-    except KeyboardInterrupt:
-        print("Server stopped.")
+    except InterruptedError:
+        logger.info("Shutting down")
+        sr_thread.join()
     finally:
         redis_client.delete("real_esrgan_api_queue")
         redis_client.close()
