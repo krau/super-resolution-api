@@ -156,16 +156,12 @@ if __name__ == "__main__":
 
     try:
         sr_thread = threading.Thread(target=listen_queue)
-        sr_thread.daemon = True
         sr_thread.start()
         uvicorn.run(
             app,
             host=settings.get("host", "0.0.0.0"),
             port=settings.get("port", 39721),
         )
-    except InterruptedError:
-        logger.info("Shutting down")
-        sr_thread.join()
     finally:
         redis_client.delete("real_esrgan_api_queue")
         redis_client.close()
