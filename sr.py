@@ -134,6 +134,7 @@ def listen_queue(stream_name: str = "real_esrgan_api_queue"):
             pickle.dumps({"status": "processing"}),
             ex=86400,
         )
+        start_time = datetime.datetime.now()
         processed_image_path = _process_image(
             input_image=input_image,
             tile_size=tile_size,
@@ -149,6 +150,9 @@ def listen_queue(stream_name: str = "real_esrgan_api_queue"):
                 ex=86400,
             )
             continue
+        logger.debug(
+            f"Time taken: {(datetime.datetime.now() - start_time).seconds} seconds to process {input_image}"
+        )
         redis_client.set(
             f"real_esrgan_api_result_{message_id.decode('utf-8')}",
             pickle.dumps(
