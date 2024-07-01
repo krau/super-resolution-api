@@ -67,6 +67,7 @@ async def super_resolution(
         )
 
     temp = tempfile.NamedTemporaryFile(dir="./temp", delete=False)
+    temp_path = pathlib.Path(temp.name)
     try:
         if url is not None:
             async with httpx.AsyncClient() as client:
@@ -82,7 +83,6 @@ async def super_resolution(
                         detail="Invalid image format",
                     )
                 temp.write(response.content)
-                temp_path = pathlib.Path(temp.name)
         else:
             if file.content_type not in ["image/jpeg", "image/png"]:
                 raise HTTPException(
@@ -90,7 +90,6 @@ async def super_resolution(
                     detail="Invalid image format",
                 )
             temp.write(file.file.read())
-            temp_path = pathlib.Path(temp.name)
     except Exception as e:
         logger.error(f"process image error: {e}")
         temp.close()
