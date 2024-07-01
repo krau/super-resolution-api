@@ -46,7 +46,7 @@ def _process_image(
             model.path,
             model.scale,
             model.name,
-            providers=[settings.get("provider"), "CUDAExecutionProvider"],
+            providers=[settings.get("provider", "CUDAExecutionProvider")],
             provider_options=provider_options,
         )
         if skip_alpha:
