@@ -66,49 +66,53 @@ async def super_resolution(
         )
 
     temp = tempfile.NamedTemporaryFile(dir="./temp", delete=False)
-    if url is not None:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            if response.status_code != 200:
-                return {"message": "Failed to download the image"}
-            if response.headers.get("Content-Type") not in [
-                "image/jpeg",
-                "image/png",
-            ]:
+    try:
+        if url is not None:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url)
+                if response.status_code != 200:
+                    return {"message": "Failed to download the image"}
+                if response.headers.get("Content-Type") not in [
+                    "image/jpeg",
+                    "image/png",
+                ]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid image format",
+                    )
+                temp.write(response.content)
+                temp_path = pathlib.Path(temp.name)
+        else:
+            if file.content_type not in ["image/jpeg", "image/png"]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid image format",
                 )
-            temp.write(response.content)
+            temp.write(file.file.read())
             temp_path = pathlib.Path(temp.name)
-    else:
-        if file.content_type not in ["image/jpeg", "image/png"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid image format",
-            )
-        temp.write(file.file.read())
-        temp_path = pathlib.Path(temp.name)
-        resp = redis_client.xadd(
-            "real_esrgan_api_queue",
-            {
-                "data": pickle.dumps(
-                    {
-                        "input_image": temp_path,
-                        "tile_size": tile_size,
-                        "scale": scale,
-                        "skip_alpha": skip_alpha,
-                        "resize_to": resize_to,
-                    }
-                ),
-            },
-        )
-        logger.info(f"Task added to queue: {resp.decode('utf-8')}")
-        redis_client.set(
-            f"real_esrgan_api_result_{resp.decode('utf-8')}",
-            pickle.dumps({"status": "pending"}),
-            ex=86400,
-        )
+    except Exception as e:
+        logger.error(f"process image error: {e}")
+        temp.close()
+    resp = redis_client.xadd(
+        "real_esrgan_api_queue",
+        {
+            "data": pickle.dumps(
+                {
+                    "input_image": temp_path,
+                    "tile_size": tile_size,
+                    "scale": scale,
+                    "skip_alpha": skip_alpha,
+                    "resize_to": resize_to,
+                }
+            ),
+        },
+    )
+    logger.info(f"Task added to queue: {resp.decode('utf-8')}")
+    redis_client.set(
+        f"real_esrgan_api_result_{resp.decode('utf-8')}",
+        pickle.dumps({"status": "pending"}),
+        ex=86400,
+    )
     return {"message": "Success", "task_id": f"{resp.decode('utf-8')}"}
 
 
