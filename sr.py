@@ -37,7 +37,7 @@ def _process_image(
     gpuid: int = 0,
     clean: bool = True,
 ) -> Path:
-    logger.info(f"process image: {input_image}")
+    logger.debug(f"processing image: {input_image}")
     try:
         provider_options = None
         if int(gpuid) >= 0:
@@ -52,6 +52,7 @@ def _process_image(
         if skip_alpha:
             logger.debug("Skip Alpha Channel")
             sr_instance.alpha_upsampler = "interpolation"
+        logger.debug(f"decoding image: {input_image}")
         img = cv2.imdecode(
             np.fromfile(input_image, dtype=np.uint8), cv2.IMREAD_UNCHANGED
         )
@@ -99,7 +100,6 @@ def _process_image(
         final_output_path = Path(output_path) / f"{input_image.stem}_{model.name}.png"
         if not Path(output_path).exists():
             Path(output_path).mkdir(parents=True)
-        logger.debug(f"save to {final_output_path}")
         cv2.imencode(".png", img_out)[1].tofile(final_output_path)
         return final_output_path
     except Exception as e:
@@ -108,7 +108,6 @@ def _process_image(
     finally:
         sr_instance = None
         if clean and input_image.exists():
-            logger.debug(f"clean {input_image}")
             input_image.unlink()
 
 
@@ -122,7 +121,7 @@ def listen_queue(stream_name: str = "real_esrgan_api_queue"):
         message_id = messages[0][1][0][0]
         last_id = message_id
         message = messages[0][1][0][1]
-        logger.info(f"Received message: {message_id}")
+        logger.info(f"Processing task: {message_id.decode('utf-8')}")
         data: dict[str, Path | int | bool | str | None] = pickle.loads(message[b"data"])
         input_image = data.get("input_image")
         tile_size = data.get("tile_size", 64)
