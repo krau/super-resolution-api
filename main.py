@@ -60,19 +60,14 @@ async def super_resolution(
     skip_alpha: bool = Form(default=False),
     resize_to: str | None = Form(default=None),
     url: str | None = Form(default=None),
+    timeout: int = Form(
+        default=settings.get("timeout", 30), ge=1, le=settings.get("max_timeout", 300)
+    ),
 ):
     if (file or url) is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No file or url provided"
         )
-
-    xlength = redis_client.xlen("real_esrgan_api_queue")
-    if xlength > 10:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many requests, please try again later",
-        )
-
     temp = tempfile.NamedTemporaryFile(dir="./temp", delete=False)
     temp_path = pathlib.Path(temp.name)
     try:
@@ -110,6 +105,7 @@ async def super_resolution(
                     "scale": scale,
                     "skip_alpha": skip_alpha,
                     "resize_to": resize_to,
+                    "timeout": timeout,
                 }
             ),
         },

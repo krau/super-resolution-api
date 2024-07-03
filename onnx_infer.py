@@ -135,7 +135,6 @@ class OnnxSRInfer:
                 ]
 
                 # upscale tile
-                logger.debug(f"upscale tile {y * tiles_x + x + 1}/{tiles_x * tiles_y}")
                 output_tile = self.infer(input_tile)
                 # output tile area on total image
                 output_start_x = input_start_x * self.scale

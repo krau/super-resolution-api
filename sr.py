@@ -6,6 +6,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from func_timeout import func_set_timeout
+from func_timeout.exceptions import FunctionTimedOut
 from loguru import logger
 
 from common import redis_client
@@ -21,11 +23,15 @@ class ModelInfo:
     algo: str = ""
 
 
+STREAM_NAME = "real_esrgan_api_queue"
+
+
 model = ModelInfo(
     "x4_Anime_6B-Official", "models/x4_Anime_6B-Official.onnx", 4, "real-esrgan"
 )
 
 
+@func_set_timeout(settings.get("timeout", 30), allowOverride=True)
 def _process_image(
     model: ModelInfo = model,
     tile_size: int = 64,  # 分块大小
@@ -38,6 +44,7 @@ def _process_image(
     clean: bool = True,
 ) -> Path:
     logger.debug(f"processing image: {input_image}")
+    start_time = datetime.datetime.now()
     try:
         provider_options = None
         if int(gpuid) >= 0:
@@ -106,12 +113,16 @@ def _process_image(
         logger.error(f"process image error: {e}")
         return None
     finally:
-        sr_instance = None
+        logger.debug(
+            f"Time taken: {(datetime.datetime.now() - start_time).seconds} seconds to process {input_image}"
+        )
         if clean and input_image.exists():
             input_image.unlink()
 
 
-def listen_queue(stream_name: str = "real_esrgan_api_queue"):
+def listen_queue(
+    stream_name: str = STREAM_NAME, default_timeout: int = settings.get("timeout", 30)
+):
     logger.info(f"Listening to stream: {stream_name}")
     last_id = "0"
     while True:
@@ -128,44 +139,45 @@ def listen_queue(stream_name: str = "real_esrgan_api_queue"):
         scale = data.get("scale", 4)
         skip_alpha = data.get("skip_alpha", False)
         resize_to = data.get("resize_to", None)
+        time_out = data.get("timeout", default_timeout)
         redis_client.set(
             f"real_esrgan_api_result_{message_id.decode('utf-8')}",
             pickle.dumps({"status": "processing"}),
             ex=86400,
         )
-        start_time = datetime.datetime.now()
-        processed_image_path = _process_image(
-            input_image=input_image,
-            tile_size=tile_size,
-            scale=scale,
-            skip_alpha=skip_alpha,
-            resize_to=resize_to,
-        )
-        redis_client.xdel(stream_name, message_id)
-        if not processed_image_path:
-            logger.error("Failed to process image")
+        processed_path = None
+        try:
+            processed_path = _process_image(
+                input_image=input_image,
+                tile_size=tile_size,
+                scale=scale,
+                skip_alpha=skip_alpha,
+                resize_to=resize_to,
+                forceTimeout=time_out,
+            )
+        except FunctionTimedOut as e:
+            logger.warning(e)
+            processed_path = None
+        if processed_path:
+            redis_client.set(
+                f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+                pickle.dumps(
+                    {
+                        "status": "success",
+                        "path": processed_path.as_posix(),
+                        "size": processed_path.stat().st_size,
+                    }
+                ),
+                ex=86400,
+            )
+            logger.success(f"Processed image: {processed_path}")
+        else:
             redis_client.set(
                 f"real_esrgan_api_result_{message_id.decode('utf-8')}",
                 pickle.dumps({"status": "failed"}),
                 ex=86400,
             )
-            continue
-        logger.debug(
-            f"Time taken: {(datetime.datetime.now() - start_time).seconds} seconds to process {input_image}"
-        )
-        redis_client.set(
-            f"real_esrgan_api_result_{message_id.decode('utf-8')}",
-            pickle.dumps(
-                {
-                    "status": "success",
-                    "path": processed_image_path.as_posix(),
-                    "size": processed_image_path.stat().st_size,
-                }
-            ),
-            ex=86400,
-        )
-        logger.success(f"Processed image: {processed_image_path}")
-
+        redis_client.xdel(stream_name, message_id)
         for file in Path("output").iterdir():
             if datetime.datetime.now().timestamp() - file.stat().st_mtime > 86400:
                 file.unlink()

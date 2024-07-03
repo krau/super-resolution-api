@@ -3,3 +3,5 @@ token = "qwqowo"
 redis_url = "redis://localhost:6379"
 host = "0.0.0.0"
 port = 39721
+max_timeout = 300
+timeout = 30
