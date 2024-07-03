@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from loguru import logger
 
-from common import redis_client
+import common
 from config import settings
 from sr import listen_queue
 
@@ -33,8 +33,8 @@ async def verify_token(x_token: str = Header()):
 
 app = FastAPI(
     dependencies=[Depends(verify_token)],
-    title="Real ESRGAN API",
-    description="Restful API for Real ESRGAN",
+    title="Super Resolution API",
+    description="Super Resolution API for Anime and Illustration",
 )
 
 
@@ -49,7 +49,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Real ESRGAN API is running"}
+    return {"message": "Super Resolution API is running"}
 
 
 @app.post("/sr")
@@ -61,8 +61,9 @@ async def super_resolution(
     resize_to: str | None = Form(default=None),
     url: str | None = Form(default=None),
     timeout: int = Form(
-        default=settings.get("timeout", 30), ge=1, le=settings.get("max_timeout", 300)
+        default=common.PROGRESS_TIMEOUT, ge=1, le=common.MAX_ALLOWED_TIMEOUT
     ),
+    model: str = Form(default=common.MODEL_NAME_DEFAULT),
 ):
     if (file or url) is None:
         raise HTTPException(
@@ -95,8 +96,8 @@ async def super_resolution(
     except Exception as e:
         logger.error(f"process image error: {e}")
         temp.close()
-    resp = redis_client.xadd(
-        "real_esrgan_api_queue",
+    resp = common.redis_client.xadd(
+        common.STREAM_NAME,
         {
             "data": pickle.dumps(
                 {
@@ -106,14 +107,15 @@ async def super_resolution(
                     "skip_alpha": skip_alpha,
                     "resize_to": resize_to,
                     "timeout": timeout,
+                    "model": model,
                 }
             ),
         },
     )
-    xlength = redis_client.xlen("real_esrgan_api_queue")
+    xlength = common.redis_client.xlen(common.STREAM_NAME)
     if xlength > 1:
-        redis_client.set(
-            f"real_esrgan_api_result_{resp.decode('utf-8')}",
+        common.redis_client.set(
+            f"super_resolution_api_result_{resp.decode('utf-8')}",
             pickle.dumps({"status": "pending"}),
             ex=86400,
         )
@@ -123,7 +125,7 @@ async def super_resolution(
 
 @app.get("/result/{task_id}")
 async def get_result(task_id: str):
-    result = redis_client.get(f"real_esrgan_api_result_{task_id}")
+    result = common.redis_client.get(f"super_resolution_api_result_{task_id}")
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
@@ -134,7 +136,7 @@ async def get_result(task_id: str):
 
 @app.get("/result/{task_id}/download")
 async def download_result(task_id: str):
-    result = redis_client.get(f"real_esrgan_api_result_{task_id}")
+    result = common.redis_client.get(f"super_resolution_api_result_{task_id}")
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
@@ -176,5 +178,5 @@ if __name__ == "__main__":
         pass
     finally:
         logger.info("Shutting down")
-        redis_client.delete("real_esrgan_api_queue")
+        common.redis_client.delete(common.STREAM_NAME)
         shutil.rmtree("temp")

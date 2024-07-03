@@ -1,4 +1,4 @@
-# Real ESRGAN API
+# Super Resolution API
 
 [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)
 

@@ -1,7 +1,6 @@
 import datetime
 import math
 import pickle
-from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -10,30 +9,14 @@ from func_timeout import func_set_timeout
 from func_timeout.exceptions import FunctionTimedOut
 from loguru import logger
 
-from common import redis_client
+import common
 from config import settings
 from onnx_infer import OnnxSRInfer
 
 
-@dataclass
-class ModelInfo:
-    name: str = ""
-    path: str = ""
-    scale: int = 4
-    algo: str = ""
-
-
-STREAM_NAME = "real_esrgan_api_queue"
-
-
-model = ModelInfo(
-    "x4_Anime_6B-Official", "models/x4_Anime_6B-Official.onnx", 4, "real-esrgan"
-)
-
-
-@func_set_timeout(settings.get("timeout", 30), allowOverride=True)
+@func_set_timeout(common.PROGRESS_TIMEOUT, allowOverride=True)
 def _process_image(
-    model: ModelInfo = model,
+    model: common.ModelInfo = common.models[common.MODEL_NAME_DEFAULT],
     tile_size: int = 64,  # 分块大小
     scale: int = 4,  # 放大倍数
     skip_alpha: bool = False,  # 是否跳过alpha通道
@@ -121,12 +104,13 @@ def _process_image(
 
 
 def listen_queue(
-    stream_name: str = STREAM_NAME, default_timeout: int = settings.get("timeout", 30)
+    stream_name: str = common.STREAM_NAME,
+    default_timeout: int = common.PROGRESS_TIMEOUT,
 ):
     logger.info(f"Listening to stream: {stream_name}")
     last_id = "0"
     while True:
-        messages = redis_client.xread({stream_name: last_id}, count=1, block=0)
+        messages = common.redis_client.xread({stream_name: last_id}, count=1, block=0)
         if not messages:
             continue
         message_id = messages[0][1][0][0]
@@ -140,14 +124,16 @@ def listen_queue(
         skip_alpha = data.get("skip_alpha", False)
         resize_to = data.get("resize_to", None)
         time_out = data.get("timeout", default_timeout)
-        redis_client.set(
-            f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+        model_name = data.get("model", common.MODEL_NAME_DEFAULT)
+        common.redis_client.set(
+            f"super_resolution_api_result_{message_id.decode('utf-8')}",
             pickle.dumps({"status": "processing"}),
             ex=86400,
         )
-        processed_path = None
+        processed_path: Path | None = None
         try:
             processed_path = _process_image(
+                model=common.models[model_name],
                 input_image=input_image,
                 tile_size=tile_size,
                 scale=scale,
@@ -159,8 +145,8 @@ def listen_queue(
             logger.warning(e)
             processed_path = None
         if processed_path:
-            redis_client.set(
-                f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+            common.redis_client.set(
+                f"super_resolution_api_result_{message_id.decode('utf-8')}",
                 pickle.dumps(
                     {
                         "status": "success",
@@ -172,12 +158,12 @@ def listen_queue(
             )
             logger.success(f"Processed image: {processed_path}")
         else:
-            redis_client.set(
-                f"real_esrgan_api_result_{message_id.decode('utf-8')}",
+            common.redis_client.set(
+                f"super_resolution_api_result_{message_id.decode('utf-8')}",
                 pickle.dumps({"status": "failed"}),
                 ex=86400,
             )
-        redis_client.xdel(stream_name, message_id)
+        common.redis_client.xdel(stream_name, message_id)
         for file in Path("output").iterdir():
             if datetime.datetime.now().timestamp() - file.stat().st_mtime > 86400:
                 file.unlink()
