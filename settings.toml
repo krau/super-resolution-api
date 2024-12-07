@@ -1,4 +1,4 @@
-provider = "CUDAExecutionProvider"
+provider = "CPUExecutionProvider"
 token = "qwqowo"
 redis_url = "redis://localhost:6379"
 host = "0.0.0.0"

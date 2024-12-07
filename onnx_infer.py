@@ -7,7 +7,6 @@ import onnxruntime as ort
 from loguru import logger
 
 import common
-import config
 
 
 class OnnxSRInfer:
