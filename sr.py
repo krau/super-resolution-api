@@ -26,7 +26,7 @@ def _process_image(
     gpuid: int = 0,
     clean: bool = True,
 ) -> Path:
-    logger.debug(f"processing image: {input_image}")
+    logger.info(f"processing image: {input_image}")
     start_time = datetime.datetime.now()
     try:
         provider_options = None
@@ -96,7 +96,7 @@ def _process_image(
         logger.error(f"process image error: {e}")
         return None
     finally:
-        logger.debug(
+        logger.info(
             f"Time taken: {(datetime.datetime.now() - start_time).seconds} seconds to process {input_image}"
         )
         if clean and input_image.exists():

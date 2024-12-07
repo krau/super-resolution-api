@@ -1,5 +1,6 @@
 import math
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 import cv2
 import numpy as np
@@ -92,6 +93,7 @@ class OnnxSRInfer:
         """
         Process a single tile and update the output image.
         """
+        time_start = time.time()
         ofs_x = x * tile_size
         ofs_y = y * tile_size
 
@@ -138,6 +140,9 @@ class OnnxSRInfer:
                 output_start_x_tile:output_end_x_tile,
                 :,
             ]
+        )
+        logger.debug(
+            f"Processed tile {x},{y} in {time.time() - time_start:.2f} seconds"
         )
 
     def tile_process(
@@ -206,7 +211,7 @@ class OnnxSRInfer:
         return final_img
 
     def universal_process_pipeline(self, image, tile_size):
-        logger.debug(f"Processing image with {self.name}...")
+        logger.info(f"Processing image with {self.name}...")
         img_mode = "RGB"
         h, w, c = image.shape
         # handle RGBA image
