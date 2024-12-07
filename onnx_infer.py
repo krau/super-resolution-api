@@ -13,9 +13,9 @@ import common
 class OnnxSRInfer:
     def __init__(
         self,
-        model_path,
-        scale,
-        name,
+        model_path: str,
+        scale: int,
+        name: str,
         alpha_upsampler="sr model",
         providers=["CUDAExecutionProvider"],
         provider_options=None,
