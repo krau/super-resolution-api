@@ -22,7 +22,7 @@ def _process_image(
     skip_alpha: bool = False,  # 是否跳过alpha通道
     resize_to: str = None,  # 调整大小 两种格式: 1. 1920x1080 2. 1/2
     input_image: Path = None,
-    output_path: Path | str = "output",
+    output_path: Path | str = settings.get("output_dir", "output"),
     gpuid: int = 0,
     clean: bool = True,
 ) -> Path:
@@ -104,7 +104,7 @@ def _process_image(
 
 
 def listen_queue(
-    stream_name: str = common.STREAM_NAME,
+    stream_name: str = common.SINGLE_STREAM_NAME,
     default_timeout: int = common.PROGRESS_TIMEOUT,
 ):
     logger.info(f"Listening to stream: {stream_name}")
@@ -164,6 +164,6 @@ def listen_queue(
                 ex=86400,
             )
         common.redis_client.xdel(stream_name, message_id)
-        for file in Path("output").iterdir():
+        for file in Path(settings.get("output_dir", "output")).iterdir():
             if datetime.datetime.now().timestamp() - file.stat().st_mtime > 86400:
                 file.unlink()

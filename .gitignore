@@ -1,7 +1,7 @@
 venv/
-output/
+output*/
 __pycache__/
 # Ignore dynaconf secret files
 .secrets.*
-temp/
-models/
+temp*/
+models
