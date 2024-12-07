@@ -1,9 +1,13 @@
 import math
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
 import onnxruntime as ort
 from loguru import logger
+
+import common
+import config
 
 
 class OnnxSRInfer:
@@ -85,7 +89,65 @@ class OnnxSRInfer:
         output = self.img_array_denorm_squeeze(img_sr)
         return output
 
-    def tile_process(self, img, tile_size, tile_pad=16):
+    def process_tile(self, img, x, y, tile_size, tile_pad, width, height, output):
+        """
+        Process a single tile and update the output image.
+        """
+        ofs_x = x * tile_size
+        ofs_y = y * tile_size
+
+        # Input tile area on total image
+        input_start_x = ofs_x
+        input_end_x = min(ofs_x + tile_size, width)
+        input_start_y = ofs_y
+        input_end_y = min(ofs_y + tile_size, height)
+
+        # Input tile area on total image with padding
+        input_start_x_pad = max(input_start_x - tile_pad, 0)
+        input_end_x_pad = min(input_end_x + tile_pad, width)
+        input_start_y_pad = max(input_start_y - tile_pad, 0)
+        input_end_y_pad = min(input_end_y + tile_pad, height)
+
+        # Input tile dimensions
+        input_tile_width = input_end_x - input_start_x
+        input_tile_height = input_end_y - input_start_y
+
+        # Extract the input tile with padding
+        input_tile = img[
+            input_start_y_pad:input_end_y_pad, input_start_x_pad:input_end_x_pad, :
+        ]
+
+        # Infer the output tile
+        output_tile = self.infer(input_tile)
+
+        # Output tile area on total image
+        output_start_x = input_start_x * self.scale
+        output_end_x = input_end_x * self.scale
+        output_start_y = input_start_y * self.scale
+        output_end_y = input_end_y * self.scale
+
+        # Output tile area without padding
+        output_start_x_tile = (input_start_x - input_start_x_pad) * self.scale
+        output_end_x_tile = output_start_x_tile + input_tile_width * self.scale
+        output_start_y_tile = (input_start_y - input_start_y_pad) * self.scale
+        output_end_y_tile = output_start_y_tile + input_tile_height * self.scale
+
+        # Place the processed tile into the output image
+        output[output_start_y:output_end_y, output_start_x:output_end_x, :] = (
+            output_tile[
+                output_start_y_tile:output_end_y_tile,
+                output_start_x_tile:output_end_x_tile,
+                :,
+            ]
+        )
+
+    def tile_process(
+        self,
+        img,
+        tile_size,
+        tile_pad=8,
+        max_workers=common.MAX_WORKERS,
+    ):
         """
         It will first crop input images to tiles, and then process each tile.
         Finally, all the processed tiles are merged into one images.
@@ -96,66 +158,43 @@ class OnnxSRInfer:
         return: img (np.array)(h,w,c): processed image.
         Modified from: https://github.com/ata4/esrgan-launcher
         """
-        height, width, channle = img.shape
+        height, width, channels = img.shape
+        logger.debug(f"input_shape: {img.shape}")
         output_height = height * self.scale
         output_width = width * self.scale
-        output_shape = (output_height, output_width, channle)
+        output_shape = (output_height, output_width, channels)
+        logger.debug(f"output_shape: {output_shape}")
 
         # start with black image
+        logger.debug(f"tail size: {tile_size}")
         output = np.zeros(output_shape, dtype=np.float32)
         tiles_x = math.ceil(width / tile_size)
         tiles_y = math.ceil(height / tile_size)
+        logger.debug(
+            f"tiles_x: {tiles_x}, tiles_y: {tiles_y}, total tiles: {tiles_x * tiles_y}"
+        )
 
-        # loop over all tiles
-        for y in range(tiles_y):
-            for x in range(tiles_x):
-                # extract tile from input image
-                ofs_x = x * tile_size
-                ofs_y = y * tile_size
-                # input tile area on total image
-                input_start_x = ofs_x
-                input_end_x = min(ofs_x + tile_size, width)
-                input_start_y = ofs_y
-                input_end_y = min(ofs_y + tile_size, height)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for y in range(tiles_y):
+                for x in range(tiles_x):
+                    futures.append(
+                        executor.submit(
+                            self.process_tile,
+                            img,
+                            x,
+                            y,
+                            tile_size,
+                            tile_pad,
+                            width,
+                            height,
+                            output,
+                        )
+                    )
 
-                # input tile area on total image with padding
-                input_start_x_pad = max(input_start_x - tile_pad, 0)
-                input_end_x_pad = min(input_end_x + tile_pad, width)
-                input_start_y_pad = max(input_start_y - tile_pad, 0)
-                input_end_y_pad = min(input_end_y + tile_pad, height)
+            for future in futures:
+                future.result()
 
-                # input tile dimensions
-                input_tile_width = input_end_x - input_start_x
-                input_tile_height = input_end_y - input_start_y
-                # tile_idx = y * tiles_x + x + 1
-                input_tile = img[
-                    input_start_y_pad:input_end_y_pad,
-                    input_start_x_pad:input_end_x_pad,
-                    :,
-                ]
-
-                # upscale tile
-                output_tile = self.infer(input_tile)
-                # output tile area on total image
-                output_start_x = input_start_x * self.scale
-                output_end_x = input_end_x * self.scale
-                output_start_y = input_start_y * self.scale
-                output_end_y = input_end_y * self.scale
-
-                # output tile area without padding
-                output_start_x_tile = (input_start_x - input_start_x_pad) * self.scale
-                output_end_x_tile = output_start_x_tile + input_tile_width * self.scale
-                output_start_y_tile = (input_start_y - input_start_y_pad) * self.scale
-                output_end_y_tile = output_start_y_tile + input_tile_height * self.scale
-
-                # put tile into output image
-                output[output_start_y:output_end_y, output_start_x:output_end_x, :] = (
-                    output_tile[
-                        output_start_y_tile:output_end_y_tile,
-                        output_start_x_tile:output_end_x_tile,
-                        :,
-                    ]
-                )
         return output
 
     def rgb_process_pipeline(self, image, tile_size):

@@ -55,8 +55,8 @@ async def root():
 @app.post("/sr")
 async def super_resolution(
     file: UploadFile | None = File(default=None),
-    tile_size: int = Form(default=64),
-    scale: int = Form(default=4),
+    tile_size: int = Form(default=64, ge=32, le=128),
+    scale: int = Form(default=4, ge=2, le=8),
     skip_alpha: bool = Form(default=False),
     resize_to: str | None = Form(default=None),
     url: str | None = Form(default=None),
@@ -80,6 +80,7 @@ async def super_resolution(
                 if response.headers.get("Content-Type") not in [
                     "image/jpeg",
                     "image/png",
+                    "image/webp",
                 ]:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -87,7 +88,7 @@ async def super_resolution(
                     )
                 temp.write(response.content)
         else:
-            if file.content_type not in ["image/jpeg", "image/png"]:
+            if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid image format",
