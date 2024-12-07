@@ -1,6 +1,6 @@
 import math
-from concurrent.futures import ThreadPoolExecutor
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
