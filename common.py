@@ -27,10 +27,18 @@ class ModelInfo:
     algo: str = ""
 
 
-SINGLE_STREAM_NAME = "super_resolution_api_queue"
+BASE_STREAM_NAME = (
+    "super_resolution_api_queue"
+    if not settings.get("worker_id")
+    else f"super_resolution_api_queue_{settings.get('worker_id')}"
+)
 WORKER_KEY_PREFIX = "super_resolution_api_worker_"
 DISTRIBUTED_STREAM_NAME = "super_resolution_api_distributed_queue"
-
+RESULT_KEY_PREFIX = (
+    "super_resolution_api_result_"
+    if not settings.get("worker_id")
+    else f"super_resolution_api_result_{settings.get('worker_id')}_"
+)
 PROGRESS_TIMEOUT = settings.get("timeout", 30)
 MAX_ALLOWED_TIMEOUT = settings.get("max_timeout", 300)
 MAX_WORKERS = settings.get("max_workers", 8)
@@ -83,8 +91,6 @@ class TileInfo:
     x: int
     y: int
     filpath: pathlib.Path
-
-    
 
 
 def split_image(

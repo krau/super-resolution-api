@@ -56,7 +56,7 @@ def register_routes():
 
     @app.get("/result/{task_id}")
     async def get_result(task_id: str):
-        result = common.redis_client.get(f"super_resolution_api_result_{task_id}")
+        result = common.redis_client.get(f"{common.RESULT_KEY_PREFIX}{task_id}")
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
@@ -66,7 +66,7 @@ def register_routes():
 
     @app.get("/result/{task_id}/download")
     async def download_result(task_id: str):
-        result = common.redis_client.get(f"super_resolution_api_result_{task_id}")
+        result = common.redis_client.get(f"{common.RESULT_KEY_PREFIX}{task_id}")
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
@@ -144,7 +144,7 @@ def register_single_sr_route():
                 detail="Failed to process the image",
             )
         resp = common.redis_client.xadd(
-            common.SINGLE_STREAM_NAME,
+            common.BASE_STREAM_NAME,
             {
                 "data": pickle.dumps(
                     {
@@ -159,10 +159,10 @@ def register_single_sr_route():
                 ),
             },
         )
-        xlength = common.redis_client.xlen(common.SINGLE_STREAM_NAME)
+        xlength = common.redis_client.xlen(common.BASE_STREAM_NAME)
         if xlength > 1:
             common.redis_client.set(
-                f"super_resolution_api_result_{resp.decode('utf-8')}",
+                f"{common.RESULT_KEY_PREFIX}{resp.decode('utf-8')}",
                 pickle.dumps({"status": "pending"}),
                 ex=86400,
             )
@@ -326,6 +326,11 @@ def register_master():
                 )
             },
         )
+        common.redis_client.set(
+            f"{common.RESULT_KEY_PREFIX}{resp.decode('utf-8')}",
+            pickle.dumps({"status": "pending"}),
+            ex=86400,
+        )
 
         return {"message": "Success", "task_id": f"{resp.decode('utf-8')}"}
 
@@ -387,6 +392,7 @@ if __name__ == "__main__":
         pass
     finally:
         logger.info("Shutting down")
-        common.redis_client.delete(common.SINGLE_STREAM_NAME)
-        common.redis_client.delete(common.DISTRIBUTED_STREAM_NAME)
+        common.redis_client.delete(common.BASE_STREAM_NAME)
+        if settings.get("mode") == "master":
+            common.redis_client.delete(common.DISTRIBUTED_STREAM_NAME)
         shutil.rmtree(settings.get("temp_dir", "./temp"))

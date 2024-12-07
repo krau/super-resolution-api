@@ -104,7 +104,7 @@ def _process_image(
 
 
 def listen_queue(
-    stream_name: str = common.SINGLE_STREAM_NAME,
+    stream_name: str = common.BASE_STREAM_NAME,
     default_timeout: int = common.PROGRESS_TIMEOUT,
 ):
     logger.info(f"Listening to stream: {stream_name}")
@@ -126,7 +126,7 @@ def listen_queue(
         time_out = data.get("timeout", default_timeout)
         model_name = data.get("model", common.MODEL_NAME_DEFAULT)
         common.redis_client.set(
-            f"super_resolution_api_result_{message_id.decode('utf-8')}",
+            f"{common.RESULT_KEY_PREFIX}{message_id.decode('utf-8')}",
             pickle.dumps({"status": "processing"}),
             ex=86400,
         )
@@ -146,7 +146,7 @@ def listen_queue(
             processed_path = None
         if processed_path:
             common.redis_client.set(
-                f"super_resolution_api_result_{message_id.decode('utf-8')}",
+                f"{common.RESULT_KEY_PREFIX}{message_id.decode('utf-8')}",
                 pickle.dumps(
                     {
                         "status": "success",
@@ -159,7 +159,7 @@ def listen_queue(
             logger.success(f"Processed image: {processed_path}")
         else:
             common.redis_client.set(
-                f"super_resolution_api_result_{message_id.decode('utf-8')}",
+                f"{common.RESULT_KEY_PREFIX}{message_id.decode('utf-8')}",
                 pickle.dumps({"status": "failed"}),
                 ex=86400,
             )
