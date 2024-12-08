@@ -1,12 +1,11 @@
 services:
   sr_api:
-    image: ghcr.io/krau/super-resolution-api
+    image: ghcr.io/krau/super-resolution-api:latest
     container_name: sr_api
     restart: always
     volumes:
       - ./output:/sr_api/output
       - ./temp:/sr_api/temp
-      - ./models:/sr_api/models
     env_file:
       - .env
     network_mode: host
