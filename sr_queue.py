@@ -243,7 +243,8 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
                     logger.info("All workers processed, start merge")
                     output_path = (
                         Path(settings.get("output_dir", "output"))
-                        / f"{input_image.stem}_{task_id.decode('utf-8')}.png"
+                        / f"{input_image.stem}"
+                        / f"{input_image.stem}_scaled_x{scale}.png"
                     )
                     common.merge_sr_tiles(
                         scaled_tiles,
