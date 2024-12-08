@@ -9,5 +9,4 @@ services:
       - ./models:/sr_api/models
     env_file:
       - .env
-    ports:
-      - "39721:5000"
+    network_mode: host
