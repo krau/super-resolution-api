@@ -17,7 +17,6 @@ dependencies = [
     "redis>=5.2.1",
     "uvicorn>=0.32.1",
     "uvloop>=0.21.0",
-    "websockets>=14.1",
 ]
 
 [dependency-groups]
