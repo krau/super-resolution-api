@@ -150,7 +150,7 @@ class OnnxSRInfer:
         img,
         tile_size,
         tile_pad=8,
-        max_workers=common.MAX_WORKERS,
+        max_workers=common.MAX_THREAD,
     ):
         """
         It will first crop input images to tiles, and then process each tile.

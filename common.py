@@ -41,7 +41,7 @@ RESULT_KEY_PREFIX = (
 )
 PROGRESS_TIMEOUT = settings.get("timeout", 30)
 MAX_ALLOWED_TIMEOUT = settings.get("max_timeout", 300)
-MAX_WORKERS = settings.get("max_workers", 8)
+MAX_THREAD = settings.get("max_thread", 8)
 MODEL_NAME_DEFAULT = "x4_Anime_6B-Official"
 MODEL_NAME_X4_JP_ILLUSTRATION_FIX1 = "x4_JP_Illustration-fix1"
 MODEL_NAME_X4_JP_ILLUSTRATION_FIX2 = "x4_JP_Illustration-fix2"
