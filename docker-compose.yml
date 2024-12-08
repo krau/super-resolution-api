@@ -1,0 +1,13 @@
+services:
+  sr_api:
+    image: ghcr.io/krau/super-resolution-api
+    container_name: sr_api
+    restart: always
+    volumes:
+      - ./output:/sr_api/output
+      - ./temp:/sr_api/temp
+      - ./models:/sr_api/models
+    env_file:
+      - .env
+    ports:
+      - "39721:5000"

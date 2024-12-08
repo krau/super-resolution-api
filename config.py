@@ -1,7 +1,7 @@
 from dynaconf import Dynaconf
 
 settings = Dynaconf(
-    envvar_prefix="REA",
+    envvar_prefix="SRAPI",
     settings_files=["settings.toml", ".secrets.toml"],
 )
 
