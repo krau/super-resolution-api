@@ -193,17 +193,16 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
             pickle.dumps({"status": "processing"}),
             ex=86400,
         )
+        original_w, original_h = common.get_image_size(input_image)
+        ok_keys = []
+        scaled_tiles: list[common.TileInfo] = []
         while True:
             try:
-                original_w, original_h = common.get_image_size(input_image)
-
-                ok_keys = []
-                scaled_tiles: list[common.TileInfo] = []
-
                 for worker_key, worker_data in worker_response.items():
+                    logger.debug(f"Checking worker: {worker_key.decode('utf-8')}")
                     worker = common.redis_client.get(worker_key)
                     if not worker:
-                        raise Exception(f"Worker {worker_key} offline")
+                        raise Exception(f"Worker {worker_key.decode('utf-8')} offline")
                     worker_host, worker_port, token = worker.decode("utf-8").split(":")
                     worker_url = f"http://{worker_host}:{worker_port}"
                     worker_task_id = worker_data["task_id"]
@@ -212,17 +211,24 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
                         headers={"X-Token": token},
                     )
                     if response.status_code != 200:
-                        raise Exception(f"Worker {worker_key} get task status failed")
+                        raise Exception(
+                            f"Worker {worker_key.decode('utf-8')} get task status failed"
+                        )
                     result = response.json()["result"]
                     if result["status"] == "failed":
-                        raise Exception(f"Worker {worker_key} processing failed")
+                        raise Exception(
+                            f"Worker {worker_key.decode('utf-8')} processing failed"
+                        )
                     if result["status"] == "success":
+                        logger.info(f"Worker {worker_key.decode('utf-8')} processed")
                         response = httpx.get(
                             f"{worker_url}/result/{worker_task_id}/download",
                             headers={"X-Token": token},
                         )
                         if response.status_code != 200:
-                            raise Exception(f"Worker {worker_key} download failed")
+                            raise Exception(
+                                f"Worker {worker_key.decode('utf-8')} download failed"
+                            )
                         tile_info: common.TileInfo = worker_data["tile_info"]
                         file_path = (
                             Path(settings.get("output_dir", "output"))
@@ -231,16 +237,19 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
                         )
                         with open(file_path, "wb") as f:
                             f.write(response.content)
-                        ok_keys.append(worker_key)
+                        logger.debug(f"Downloaded tile: {file_path}")
                         scaled_tiles.append(
                             common.TileInfo(tile_info.x, tile_info.y, file_path)
                         )
+                        ok_keys.append(worker_key)
 
                 for key in ok_keys:
-                    worker_response.pop(key)
+                    worker_response.pop(key, None)
 
                 if not worker_response:
-                    logger.info("All workers processed, start merge")
+                    logger.info(
+                        f"All workers processed, start merge {len(scaled_tiles)} tiles"
+                    )
                     output_path = (
                         Path(settings.get("output_dir", "output"))
                         / f"{input_image.stem}"

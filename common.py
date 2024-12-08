@@ -1,4 +1,3 @@
-import math
 import pathlib
 from dataclasses import dataclass
 
@@ -221,26 +220,23 @@ def merge_sr_tiles(
     cv2.imwrite(output.as_posix(), output_img)
 
 
-def calculate_grid(width: int, height: int, worker_count: int) -> tuple[int, int]:
-    """
-    Calculate grid size based on image size and worker count
-    """
-    # Calculate grid size
-    if worker_count <= 0:
-        raise ValueError("worker_count must be greater than 0")
+def calculate_grid(image_width, image_height, workers):
+    if workers <= 0:
+        raise ValueError("Worker count must be positive")
 
-    aspect_ratio = width / height
+    best_rows, best_cols = 1, workers
+    min_aspect_diff = float("inf")
 
-    best_row, best_col = 1, worker_count
-    min_difference = float("inf")
+    for rows in range(1, workers + 1):
+        if workers % rows == 0:
+            cols = workers // rows
+            tile_width = image_width / cols
+            tile_height = image_height / rows
+            aspect_ratio = max(tile_width, tile_height) / min(tile_width, tile_height)
+            aspect_diff = aspect_ratio - 1
 
-    for row in range(1, worker_count + 1):
-        col = math.ceil(worker_count / row)
-        if row * col >= worker_count:
-            current_aspect_ratio = (col / row) * aspect_ratio
-            difference = abs(current_aspect_ratio - 1)
-            if difference < min_difference:
-                best_row, best_col = row, col
-                min_difference = difference
-
-    return best_row, best_col
+            if aspect_diff < min_aspect_diff:
+                best_rows, best_cols = rows, cols
+                min_aspect_diff = aspect_diff
+    logger.debug(f"calculate_grid: {best_rows}x{best_cols}")
+    return best_rows, best_cols
