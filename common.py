@@ -1,3 +1,4 @@
+import math
 import pathlib
 from dataclasses import dataclass
 
@@ -84,6 +85,16 @@ models = {
     MODEL_NAME_X4_JP_ILLUSTRATION_FIX2: model_JP_Illustration_fix2,
     MODEL_NAME_X4_JP_ILLUSTRATION_FIX1_D: model_JP_Illustration_fix1_d,
 }
+
+
+def get_image_size(image_path: pathlib.Path) -> tuple[int, int]:
+    """
+    return: (width, height)
+    """
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise Exception(f"Failed to load image: {image_path}")
+    return img.shape[1], img.shape[0]
 
 
 @dataclass
@@ -208,3 +219,28 @@ def merge_sr_tiles(
         ).astype(np.uint8)
 
     cv2.imwrite(output.as_posix(), output_img)
+
+
+def calculate_grid(width: int, height: int, worker_count: int) -> tuple[int, int]:
+    """
+    Calculate grid size based on image size and worker count
+    """
+    # Calculate grid size
+    if worker_count <= 0:
+        raise ValueError("worker_count must be greater than 0")
+
+    aspect_ratio = width / height
+
+    best_row, best_col = 1, worker_count
+    min_difference = float("inf")
+
+    for row in range(1, worker_count + 1):
+        col = math.ceil(worker_count / row)
+        if row * col >= worker_count:
+            current_aspect_ratio = (col / row) * aspect_ratio
+            difference = abs(current_aspect_ratio - 1)
+            if difference < min_difference:
+                best_row, best_col = row, col
+                min_difference = difference
+
+    return best_row, best_col

@@ -22,7 +22,7 @@ from loguru import logger
 
 import common
 from config import settings
-from sr import listen_distributed_queue, listen_queue
+from sr_queue import listen_distributed_queue, listen_queue
 
 
 async def verify_token(x_token: str = Header()):
@@ -281,10 +281,11 @@ def register_master():
             save_dir = pathlib.Path(
                 f"{settings.get('output_dir','./output')}/{input_temp.name.split('/')[-1]}"
             )
+            origin_width, origin_height = common.get_image_size(input_path)
             origin_tiles_info = common.split_image(
                 input_path,
                 save_dir,
-                (1, 2),  # TODO: 切割图片数量等于 worker 数量
+                common.calculate_grid(origin_width, origin_height, len(workers)),
             )
 
             response = {}

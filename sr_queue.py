@@ -195,10 +195,7 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
         )
         while True:
             try:
-                input_img = cv2.imread(str(input_image))
-                if input_img is None:
-                    raise Exception(f"Failed to read image: {input_image}")
-                original_h, original_w, _ = input_img.shape
+                original_w, original_h = common.get_image_size(input_image)
 
                 ok_keys = []
                 scaled_tiles: list[common.TileInfo] = []
