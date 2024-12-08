@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import pathlib
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -139,6 +139,7 @@ def merge_sr_tiles(
 ):
     """
     合并超分辨率后的图块
+
     tiles: 超分辨率后的图块信息列表, 需要根据 filepath 读取图块, 根据 x, y 位置信息进行拼接
     output: 合并后的图片保存路径
     original_size: 原始图片的尺寸
@@ -146,6 +147,10 @@ def merge_sr_tiles(
     scale 为超分辨率倍数
     """
     # Calculate output dimensions
+    logger.debug(
+        f"正在合并 {len(tiles)} 张超分辨率图块, 原尺寸: {original_size}, 缩放倍数: {scale}"
+    )
+
     width, height = original_size
     out_width = width * scale
     out_height = height * scale

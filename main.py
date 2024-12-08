@@ -22,7 +22,7 @@ from loguru import logger
 
 import common
 from config import settings
-from sr import listen_queue
+from sr import listen_distributed_queue, listen_queue
 
 
 async def verify_token(x_token: str = Header()):
@@ -192,6 +192,19 @@ def register_master():
             )
         return {"message": "Success"}
 
+    @app.get("/workers")
+    async def get_workers():
+        workers = common.redis_client.keys(f"{common.WORKER_KEY_PREFIX}*")
+        return {
+            "workers": [
+                {
+                    "id": worker.decode("utf-8").split("_")[-1],
+                    "data": common.redis_client.get(worker).decode("utf-8"),
+                }
+                for worker in workers
+            ]
+        }
+
     @app.post("/sr")
     async def super_resolution(
         file: UploadFile | None = File(default=None),
@@ -279,13 +292,18 @@ def register_master():
             for index, worker_key in enumerate(workers):
                 worker = common.redis_client.get(worker_key)
                 worker_host, worker_port, token = worker.decode("utf-8").split(":")
-                worker_url = f"http://{worker_host}:{worker_port}/sr"
+                worker_url = f"http://{worker_host}:{worker_port}"
                 tile_info = origin_tiles_info[index]
 
                 with open(tile_info.filpath, "rb") as tile_file:
                     async with httpx.AsyncClient() as client:
+                        resp = await client.get(
+                            worker_url + "/", headers={"X-Token": token}
+                        )
+                        if resp.status_code != 200:
+                            raise Exception(f"Worker {worker_url} is not available")
                         resp = await client.post(
-                            url=worker_url,
+                            url=f"{worker_url}/sr",
                             files={"file": tile_file},
                             data={
                                 "tile_size": tile_size,
@@ -302,16 +320,16 @@ def register_master():
                         f"Woker {worker_url} failed to process the image: {resp.text}"
                     )
 
-                resp_dict = resp.json()
+                resp_dict = resp.json().copy()
                 resp_dict["tile_info"] = tile_info
                 response[worker_key] = resp_dict
 
         except Exception as e:
-            logger.error(f"split image error: {e}")
+            logger.error(f"error: {e}")
             input_temp.close()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to split the image",
+                detail=f"Failed to process the image: {e}",
             )
 
         resp = common.redis_client.xadd(
@@ -368,16 +386,19 @@ if __name__ == "__main__":
     register_routes()
     if settings.get("mode", "single") == "single":
         register_single_sr_route()
-        sr_thread = threading.Thread(target=listen_queue)
-        sr_thread.daemon = True
-        sr_thread.start()
     elif settings.get("mode") == "master":
         register_master()
+        queue_thread = threading.Thread(target=listen_distributed_queue)
+        queue_thread.daemon = True
+        queue_thread.start()
     else:
         register_slave()
-        sr_thread = threading.Thread(target=listen_queue)
-        sr_thread.daemon = True
-        sr_thread.start()
+
+    if settings.get("mode") != "master":
+        queue_thread = threading.Thread(target=listen_queue)
+        queue_thread.daemon = True
+        queue_thread.start()
+
     if not pathlib.Path(settings.get("temp_dir", "./temp")).exists():
         pathlib.Path(settings.get("temp_dir", "./temp")).mkdir(parents=True)
     import uvicorn

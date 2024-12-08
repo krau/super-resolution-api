@@ -1,9 +1,11 @@
 import datetime
 import math
 import pickle
+import time
 from pathlib import Path
 
 import cv2
+import httpx
 import numpy as np
 from func_timeout import func_set_timeout
 from func_timeout.exceptions import FunctionTimedOut
@@ -167,3 +169,113 @@ def listen_queue(
         for file in Path(settings.get("output_dir", "output")).iterdir():
             if datetime.datetime.now().timestamp() - file.stat().st_mtime > 86400:
                 file.unlink()
+
+
+def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
+    logger.info(f"Listening to distributed stream: {stream_name}")
+    last_id = "0"
+    while True:
+        messages = common.redis_client.xread({stream_name: last_id}, count=1, block=0)
+        if not messages:
+            continue
+        task_id = messages[0][1][0][0]
+        last_id = task_id
+        message = messages[0][1][0][1]
+        logger.info(f"Processing task: {task_id.decode('utf-8')}")
+        time_start = datetime.datetime.now()
+        data: dict = pickle.loads(message[b"data"])
+        worker_response: dict = data.get("worker_response")
+        input_image: Path = data.get("input_image")
+        scale: int = data.get("scale", 4)
+
+        common.redis_client.set(
+            f"{common.RESULT_KEY_PREFIX}{task_id.decode('utf-8')}",
+            pickle.dumps({"status": "processing"}),
+            ex=86400,
+        )
+        while True:
+            try:
+                input_img = cv2.imread(str(input_image))
+                if input_img is None:
+                    raise Exception(f"Failed to read image: {input_image}")
+                original_h, original_w, _ = input_img.shape
+
+                ok_keys = []
+                scaled_tiles: list[common.TileInfo] = []
+
+                for worker_key, worker_data in worker_response.items():
+                    worker = common.redis_client.get(worker_key)
+                    if not worker:
+                        raise Exception(f"Worker {worker_key} offline")
+                    worker_host, worker_port, token = worker.decode("utf-8").split(":")
+                    worker_url = f"http://{worker_host}:{worker_port}"
+                    worker_task_id = worker_data["task_id"]
+                    response = httpx.get(
+                        f"{worker_url}/result/{worker_task_id}",
+                        headers={"X-Token": token},
+                    )
+                    if response.status_code != 200:
+                        raise Exception(f"Worker {worker_key} get task status failed")
+                    result = response.json()["result"]
+                    if result["status"] == "failed":
+                        raise Exception(f"Worker {worker_key} processing failed")
+                    if result["status"] == "success":
+                        response = httpx.get(
+                            f"{worker_url}/result/{worker_task_id}/download",
+                            headers={"X-Token": token},
+                        )
+                        if response.status_code != 200:
+                            raise Exception(f"Worker {worker_key} download failed")
+                        tile_info: common.TileInfo = worker_data["tile_info"]
+                        file_path = (
+                            Path(settings.get("output_dir", "output"))
+                            / f"{input_image.stem}"
+                            / f"{input_image.stem}_scaled_{tile_info.y}_{tile_info.x}.png"
+                        )
+                        with open(file_path, "wb") as f:
+                            f.write(response.content)
+                        ok_keys.append(worker_key)
+                        scaled_tiles.append(
+                            common.TileInfo(tile_info.x, tile_info.y, file_path)
+                        )
+
+                for key in ok_keys:
+                    worker_response.pop(key)
+
+                if not worker_response:
+                    logger.info("All workers processed, start merge")
+                    output_path = (
+                        Path(settings.get("output_dir", "output"))
+                        / f"{input_image.stem}_{task_id.decode('utf-8')}.png"
+                    )
+                    common.merge_sr_tiles(
+                        scaled_tiles,
+                        output_path,
+                        (original_w, original_h),
+                        scale,
+                    )
+                    logger.success(
+                        f"Processed image: {output_path}, time taken: {(datetime.datetime.now() - time_start).seconds} seconds"
+                    )
+                    common.redis_client.set(
+                        f"{common.RESULT_KEY_PREFIX}{task_id.decode('utf-8')}",
+                        pickle.dumps(
+                            {
+                                "status": "success",
+                                "path": output_path.as_posix(),
+                                "size": output_path.stat().st_size,
+                            }
+                        ),
+                        ex=86400,
+                    )
+                    break
+
+                time.sleep(5)
+            except Exception as e:
+                logger.error(f"{e.__class__.__name__}: {e}")
+                common.redis_client.set(
+                    f"{common.RESULT_KEY_PREFIX}{task_id.decode('utf-8')}",
+                    pickle.dumps({"status": "failed"}),
+                    ex=86400,
+                )
+                break
