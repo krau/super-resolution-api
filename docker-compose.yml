@@ -2,7 +2,7 @@ services:
   sr_api:
     image: ghcr.io/krau/super-resolution-api:latest
     container_name: sr_api
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./output:/sr_api/output
       - ./temp:/sr_api/temp
