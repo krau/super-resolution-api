@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 import onnxruntime as ort
-from loguru import logger
+from logger import logger
 
 import common
 

@@ -9,7 +9,7 @@ import httpx
 import numpy as np
 from func_timeout import func_set_timeout
 from func_timeout.exceptions import FunctionTimedOut
-from loguru import logger
+from logger import logger
 
 import common
 from config import settings

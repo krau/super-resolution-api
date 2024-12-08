@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 import redis
-from loguru import logger
+from logger import logger
 
 from config import settings
 
