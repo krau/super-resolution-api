@@ -185,7 +185,8 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
         time_start = datetime.datetime.now()
         data: dict = pickle.loads(message[b"data"])
         worker_response: dict = data.get("worker_response")
-        input_image: Path = data.get("input_image")
+        input_image = data.get("input_image")
+        input_image: Path
         scale: int = data.get("scale", 4)
 
         common.redis_client.set(
@@ -203,8 +204,7 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
                     worker = common.redis_client.get(worker_key)
                     if not worker:
                         raise Exception(f"Worker {worker_key.decode('utf-8')} offline")
-                    worker_host, worker_port, token = worker.decode("utf-8").split(":")
-                    worker_url = f"http://{worker_host}:{worker_port}"
+                    worker_url, token = worker.decode("utf-8").split("|")
                     worker_task_id = worker_data["task_id"]
                     response = httpx.get(
                         f"{worker_url}/result/{worker_task_id}",

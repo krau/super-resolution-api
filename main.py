@@ -174,14 +174,13 @@ def register_master():
     @app.post("/register")
     async def register_worker(
         worker_id: str = Form(...),
-        worker_host: str = Form(...),
-        worker_port: int = Form(...),
+        worker_url: str = Form(...),
         worker_token: str = Form(...),
     ):
         try:
             common.redis_client.set(
                 f"{common.WORKER_KEY_PREFIX}{worker_id}",
-                f"{worker_host}:{worker_port}:{worker_token}",
+                f"{worker_url}|{worker_token}",
                 ex=300,
             )
         except Exception as e:
@@ -292,8 +291,7 @@ def register_master():
 
             for index, worker_key in enumerate(workers):
                 worker = common.redis_client.get(worker_key)
-                worker_host, worker_port, token = worker.decode("utf-8").split(":")
-                worker_url = f"http://{worker_host}:{worker_port}"
+                worker_url, token = worker.decode("utf-8").split("|")
                 tile_info = origin_tiles_info[index]
 
                 with open(tile_info.filpath, "rb") as tile_file:
@@ -365,8 +363,7 @@ def register_slave():
                         url=f"{settings.get('master_url')}/register",
                         data={
                             "worker_id": settings.get("worker_id"),
-                            "worker_host": settings.get("worker_host"),
-                            "worker_port": settings.get("port"),
+                            "worker_url": settings.get("worker_url"),
                             "worker_token": settings.get("token"),
                         },
                         headers={"X-Token": settings.get("master_token")},
