@@ -277,7 +277,7 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
                     )
                     break
 
-                time.sleep(5)
+                time.sleep(settings.get("worker_check_interval", 5))
             except Exception as e:
                 logger.error(f"{e.__class__.__name__}: {e}")
                 common.redis_client.set(

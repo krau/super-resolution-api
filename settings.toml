@@ -14,3 +14,6 @@ worker_url = "http://localhost:39721"
 temp_dir = "./temp"
 output_dir = "./output"
 log_level = "DEBUG"
+worker_check_interval = 5
+worker_expire = 120
+register_interval = 30

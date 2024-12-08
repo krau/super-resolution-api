@@ -181,7 +181,7 @@ def register_master():
             common.redis_client.set(
                 f"{common.WORKER_KEY_PREFIX}{worker_id}",
                 f"{worker_url}|{worker_token}",
-                ex=300,
+                ex=settings.get("worker_expire", 120),
             )
         except Exception as e:
             logger.error(f"Failed to register worker: {e}")
@@ -373,7 +373,7 @@ def register_slave():
             except Exception as e:
                 logger.error(f"Registration error: {e}")
             finally:
-                time.sleep(5)
+                time.sleep(settings.get("register_interval", 30))
 
     register_thread = threading.Thread(target=register)
     register_thread.daemon = True
