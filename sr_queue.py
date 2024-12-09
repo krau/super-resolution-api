@@ -286,3 +286,7 @@ def listen_distributed_queue(stream_name: str = common.DISTRIBUTED_STREAM_NAME):
                     ex=86400,
                 )
                 break
+        common.redis_client.xdel(stream_name, task_id)
+        for file in Path(settings.get("output_dir", "output")).iterdir():
+            if datetime.datetime.now().timestamp() - file.stat().st_mtime > 86400:
+                file.unlink()
